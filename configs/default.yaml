@@ -1,0 +1,31 @@
+# Full hyperparameter sweep configuration
+experiment:
+  name: "full_sweep"
+  seed: 42
+
+embedding:
+  model: "all-MiniLM-L6-v2"
+  batch_size: 64
+
+retrieval:
+  M_values: [20, 50]
+  M_max: 50  # upper bound for caching — FAISS retrieves this many, smaller M is a slice
+
+top_p:
+  p_values: [0.5, 0.6, 0.7, 0.8, 0.9, 0.95]
+  tau_values: [0.1, 0.5, 1.0, 2.0]
+  k_values: [3, 5, 10]
+
+datasets:
+  - natural_questions
+  - triviaqa
+  - multihop_rag
+  - musique
+
+evaluation:
+  max_queries: 1000  # per dataset, null for all
+
+paths:
+  cache_dir: "data/cache"
+  output_dir: "outputs"
+  fixtures_dir: "data/fixtures"

@@ -1,0 +1,28 @@
+# Quick test configuration — fast iteration during development
+experiment:
+  name: "quick_test"
+  seed: 42
+
+embedding:
+  model: "all-MiniLM-L6-v2"
+  batch_size: 64
+
+retrieval:
+  M_values: [20]
+  M_max: 20
+
+top_p:
+  p_values: [0.7, 0.9]
+  tau_values: [1.0]
+  k_values: [5]
+
+datasets:
+  - fixtures  # hand-crafted corpus — runs end-to-end with no HF download
+
+evaluation:
+  max_queries: null  # the fixture set is tiny; use all of it
+
+paths:
+  cache_dir: "data/cache"
+  output_dir: "outputs"
+  fixtures_dir: "data/fixtures"
