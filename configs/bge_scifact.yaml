@@ -1,0 +1,30 @@
+# BGE-large validation on SciFact (peaked regime) — does the richer model
+# capture the structure better than MiniLM?
+experiment:
+  name: "bge_scifact"
+  seed: 42
+
+embedding:
+  model: "BAAI/bge-large-en-v1.5"
+  batch_size: 64
+
+retrieval:
+  M_values: [20, 50]
+  M_max: 50
+  n_distractors: 49
+
+top_p:
+  p_values: [0.5, 0.7, 0.9]
+  tau_values: [0.1, 1.0]
+  k_values: [3, 5]
+
+datasets:
+  - scifact
+
+evaluation:
+  max_queries: 100
+
+paths:
+  cache_dir: "data/cache"
+  output_dir: "outputs"
+  fixtures_dir: "data/fixtures"

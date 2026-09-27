@@ -22,6 +22,11 @@ class EmbeddingConfig:
 class RetrievalConfig:
     M_values: list[int]
     M_max: int
+    # For datasets whose candidate pool is synthesized from a corpus (e.g.
+    # SciFact): number of distractor docs to sample per query, on top of the
+    # gold docs. Capped at the number of available non-gold docs. Ignored by
+    # datasets that ship a native pool (HotpotQA, MuSiQue, MultiHop-RAG).
+    n_distractors: int = 49
 
 
 @dataclass(frozen=True)
@@ -104,6 +109,7 @@ def load_config(path: str | Path) -> Config:
         retrieval=RetrievalConfig(
             M_values=list(raw["retrieval"]["M_values"]),
             M_max=int(raw["retrieval"]["M_max"]),
+            n_distractors=int(raw["retrieval"].get("n_distractors", 49)),
         ),
         scorer=ScorerConfig(
             name=scorer_raw.get("name", "cosine"),

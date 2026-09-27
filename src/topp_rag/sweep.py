@@ -128,6 +128,7 @@ def run_sweep(config: Config) -> pd.DataFrame:
             fixtures_dir=config.paths.fixtures_dir,
             max_queries=config.evaluation.max_queries,
             seed=config.seed,
+            n_distractors=config.retrieval.n_distractors,
         )
         scorer = build_scorer(config.scorer.name, config.scorer.params)
         retrieval_cache = RetrievalCache(config.paths.cache_dir, embedding_cache, scorer)

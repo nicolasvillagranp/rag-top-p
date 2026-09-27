@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from topp_rag.datasets import HF_DATASETS, load_dataset
+from topp_rag.datasets import load_dataset
 from topp_rag.evaluate import evaluate_query
 from topp_rag.metrics import recall, tes
 
@@ -24,10 +24,11 @@ class TestDatasetSchema:
         assert len(a.queries) == 5
         assert [q["query_id"] for q in a.queries] == [q["query_id"] for q in b.queries]
 
-    @pytest.mark.parametrize("name", HF_DATASETS)
-    def test_real_datasets_are_seams(self, name, fixtures_dir):
+    def test_nq_remains_a_seam(self, fixtures_dir):
+        # NQ has no candidate pool; the other HF datasets are implemented and
+        # covered by test_loaders.py.
         with pytest.raises(NotImplementedError):
-            load_dataset(name, fixtures_dir=fixtures_dir)
+            load_dataset("natural_questions", fixtures_dir=fixtures_dir)
 
 
 class TestRecall:

@@ -8,30 +8,44 @@ sweep, evaluation) is dataset-agnostic:
       .documents  -> list[{doc_id: int, text: str}]
       .queries    -> list[{query_id: str, query: str, gold_doc_ids: list[int]}]
 
-``gold_doc_ids`` index into ``documents``. Only the ``fixtures`` source is
-implemented end-to-end; the real benchmarks are seams that raise a clear
-``NotImplementedError`` until their loaders are written, so the harness, sweep,
-and config already reference them by their final names.
+``gold_doc_ids`` index into ``documents``. The ``fixtures`` source plus MuSiQue,
+MultiHop-RAG, and TriviaQA are implemented (see :mod:`topp_rag.loaders`). Natural
+Questions remains a seam: its clean HF variants are answer-only, so there is no
+candidate pool for top-p to select among.
 """
 
 from __future__ import annotations
 
 import random
-from dataclasses import dataclass
 from pathlib import Path
 
-from . import corpus
+from . import corpus, loaders
+from .schema import LoadedDataset
 
-# Final benchmark names — referenced by config and the sweep before the real
-# loaders exist, so nothing has to be renamed when they land.
-HF_DATASETS = ("natural_questions", "triviaqa", "multihop_rag", "musique")
+# Datasets with a real loader implemented (see topp_rag.loaders). Each maps a
+# dataset name to a callable (max_queries, seed[, n_distractors]) -> LoadedDataset.
+_HF_LOADERS = {
+    # native-pool datasets (gold + distractors ship together)
+    "musique": loaders.load_musique,
+    "multihop_rag": loaders.load_multihop_rag,
+    "triviaqa": loaders.load_triviaqa,
+    "hotpotqa": loaders.load_hotpotqa,
+    "2wikimultihopqa": loaders.load_2wikimultihopqa,
+    # BEIR datasets (pool synthesized: gold from qrels + n_distractors)
+    "scifact": loaders.load_scifact,
+    "fever": loaders.load_fever,
+    "nfcorpus": loaders.load_nfcorpus,
+    "scidocs": loaders.load_scidocs,
+    "fiqa": loaders.load_fiqa,
+}
 
+# Datasets whose candidate pool is synthesized from a corpus and therefore honor
+# the ``n_distractors`` knob (others ship a native pool and ignore it).
+_SYNTHETIC_POOL = ("scifact", "fever", "nfcorpus", "scidocs", "fiqa")
 
-@dataclass(frozen=True)
-class LoadedDataset:
-    name: str
-    documents: list[dict]
-    queries: list[dict]
+# Final benchmark names — referenced by config and the sweep. natural_questions
+# stays a seam (answer-only on HF; no candidate pool).
+HF_DATASETS = ("natural_questions", *_HF_LOADERS)
 
 
 def _load_fixtures(fixtures_dir: str | Path) -> LoadedDataset:
@@ -49,11 +63,13 @@ def _sample_queries(queries: list[dict], max_queries: int | None, seed: int) -> 
 
     Sampling is seeded so a (dataset, max_queries, seed) triple always yields the
     same subset — a precondition for reproducible retrieval and sweep results.
+    The subset preserves the original order so downstream arrays stay stable.
     """
     if max_queries is None or max_queries >= len(queries):
         return queries
     rng = random.Random(seed)
-    return rng.sample(queries, max_queries)
+    chosen = set(rng.sample(range(len(queries)), max_queries))
+    return [q for i, q in enumerate(queries) if i in chosen]
 
 
 def load_dataset(
@@ -61,27 +77,42 @@ def load_dataset(
     fixtures_dir: str | Path,
     max_queries: int | None = None,
     seed: int = 42,
+    n_distractors: int = 49,
 ) -> LoadedDataset:
     """Load a dataset by name into the unified schema.
 
     Args:
-        name: ``"fixtures"`` (implemented) or one of :data:`HF_DATASETS`.
+        name: ``"fixtures"`` or one of :data:`HF_DATASETS`. ``natural_questions``
+            is a seam (its clean HF variants are answer-only, no candidate pool).
         fixtures_dir: where the fixture JSON lives / is written.
         max_queries: cap on number of queries (deterministically sampled).
         seed: sampling seed.
+        n_distractors: distractors per query for synthetic-pool datasets
+            (SciFact); ignored by datasets that ship a native pool.
+
+    The HF loaders sample queries internally and build the candidate-pool corpus
+    from only the sampled queries' passages, so the corpus stays bounded.
     """
     if name == "fixtures":
         ds = _load_fixtures(fixtures_dir)
-    elif name in HF_DATASETS:
-        raise NotImplementedError(
-            f"Real loader for '{name}' is not implemented yet. "
-            f"Build everything against 'fixtures' first; the HuggingFace "
-            f"loaders slot in here behind the same LoadedDataset schema."
-        )
-    else:
-        raise ValueError(
-            f"Unknown dataset '{name}'. Expected 'fixtures' or one of {HF_DATASETS}."
+        return LoadedDataset(
+            ds.name, ds.documents, _sample_queries(ds.queries, max_queries, seed)
         )
 
-    sampled = _sample_queries(ds.queries, max_queries, seed)
-    return LoadedDataset(name=ds.name, documents=ds.documents, queries=sampled)
+    if name in _HF_LOADERS:
+        kwargs = {"max_queries": max_queries, "seed": seed}
+        if name in _SYNTHETIC_POOL:
+            kwargs["n_distractors"] = n_distractors
+        return _HF_LOADERS[name](**kwargs)
+
+    if name == "natural_questions":
+        raise NotImplementedError(
+            "natural_questions has no candidate pool: the clean HF variants "
+            "(nq_open, sentence-transformers/natural-questions) are answer-only, "
+            "so there is nothing for top-p to select among. Use musique, "
+            "multihop_rag, or triviaqa, which ship per-query candidate pools."
+        )
+
+    raise ValueError(
+        f"Unknown dataset '{name}'. Expected 'fixtures' or one of {HF_DATASETS}."
+    )

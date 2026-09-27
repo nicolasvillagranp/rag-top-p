@@ -70,12 +70,60 @@ Unlike Xu et al., who use document count as the cost proxy, we use **token count
 
 ## Benchmarks
 
-| Dataset | Query type | Expected behaviour |
-|---|---|---|
-| **Natural Questions (NQ)** | Single-hop, factoid | Peaked distributions → aggressive pruning, high token savings |
-| **TriviaQA** | Single-hop, factoid | Similar to NQ, robustness check across domains |
-| **MultiHop-RAG** | Multi-hop | Flatter distributions → k fallback activates more frequently |
-| **MuSiQue** | Hard multi-hop | Stress test for under-retrieval edge cases |
+Top-p is a *selection* method, so every dataset is cast into the same regime: a
+per-query **candidate pool** (gold passages + distractors), unioned into one
+deduplicated corpus. Top-p selects over that pool's score distribution; recall and
+TES are measured against it. This matches the reranking/selection setting (not
+open-corpus first-stage retrieval) and keeps the sweep CPU-tractable.
+
+Two loader families cover all datasets: **BEIR-style** (`corpus / queries / qrels`
+→ pool = gold from qrels + `n_distractors` sampled corpus docs) and
+**HotpotQA-schema** (native titled-paragraph pool + `supporting_facts` gold).
+
+The datasets span a **spectrum of gold multiplicity** (median gold docs per query,
+measured on the real qrels/supporting-facts) — the axis that predicts when top-p
+prunes vs. falls back.
+
+*Peaked / single-evidence* — where top-p prunes hard and TES > 1:
+
+| Dataset | Type | Median golds | Pool / gold |
+|---|---|---|---|
+| **SciFact** (BEIR) | Claim verification | 1 (92% single) | qrels gold + distractors |
+| **FEVER** (BEIR) | Claim verification | 1 (87% single) | qrels gold + distractors |
+| **TriviaQA** (`rc`) | Factoid QA | ~1 | answer-containing passages (distant) |
+
+*Mid / multi-evidence* — a few golds; top-p prunes when the retriever is peaked:
+
+| Dataset | Type | Median golds | Pool / gold |
+|---|---|---|---|
+| **FiQA** (BEIR) | Financial opinion QA | 2 | qrels gold + distractors |
+| **HotpotQA** (distractor) | 2-hop | 2 | native 10-para; `supporting_facts` |
+| **2WikiMultihopQA** | 2-hop (bridge/comparison) | 2 | native 10-para; `supporting_facts` |
+| **MuSiQue** | Hard multi-hop | 2–4 | native 20-para; `is_supporting` |
+| **MultiHop-RAG** | Multi-hop | 2–4 | fixed 609-doc corpus; evidence |
+
+*Flat / many-evidence* — many golds, distributions flat, k fallback dominates:
+
+| Dataset | Type | Median golds | Pool / gold |
+|---|---|---|---|
+| **SciDocs** (BEIR) | Citation/sci IR | 5 | qrels gold + distractors |
+| **NFCorpus** (BEIR) | Medical IR | 16 | qrels gold + distractors |
+| ~~Natural Questions~~ | — | — | *seam:* answer-only HF variants (no pool) |
+
+For BEIR datasets the pool is synthesized, so `retrieval.n_distractors` controls
+how many distractor docs are sampled per query (capped at available non-gold docs).
+Native-pool datasets ignore it.
+
+### Retriever strength × temperature
+
+A key empirical finding: **a stronger embedding model is a better retriever but
+makes top-p's job harder by default.** On SciFact, `bge-large-en-v1.5` reaches
+recall 0.90 (vs `all-MiniLM-L6-v2`'s 0.82) — but its richer scores are *flatter*,
+so the nucleus is large and top-p almost always falls back to top-k (TES ≈ recall).
+**Lowering the softmax temperature re-sharpens the distribution**: at `τ ≈ 0.02`,
+BGE selects ~2 docs at recall 0.86 with **TES ≈ 3.5** — a far better quality/token
+frontier than MiniLM's best (TES ≈ 1.33). This is why the temperature grid extends
+down to `0.01`: strong retrievers need a sharper `τ` to expose their peakedness.
 
 ---
 
