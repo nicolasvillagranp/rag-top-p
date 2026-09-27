@@ -1,0 +1,35 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "topp-rag"
+version = "0.1.0"
+description = "Adaptive top-p retrieval for RAG — nucleus sampling over similarity scores"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.24",
+    "faiss-cpu>=1.7",
+    "sentence-transformers>=2.2",
+    "datasets>=2.14",
+    "tiktoken>=0.5",
+    "pyyaml>=6.0",
+    "matplotlib>=3.7",
+    "seaborn>=0.12",
+    "pandas>=2.0",
+    "pyarrow>=12.0",
+    "tqdm>=4.65",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4",
+    "pytest-mock>=3.11",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/topp_rag"]
+
+[tool.pytest.ini_options]
+testpaths = ["test"]
+pythonpath = ["src"]

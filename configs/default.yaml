@@ -1,0 +1,46 @@
+# Full hyperparameter sweep configuration
+experiment:
+  name: "full_sweep"
+  seed: 42
+
+embedding:
+  model: "all-MiniLM-L6-v2"
+  batch_size: 64
+
+retrieval:
+  M_values: [20, 50]
+  M_max: 50  # upper bound for caching — FAISS retrieves this many, smaller M is a slice
+  n_distractors: 49  # SciFact: gold (~1) + 49 distractors → pool of ~50, matching M_max
+
+top_p:
+  p_values: [0.5, 0.6, 0.7, 0.8, 0.9, 0.95]
+  # Low tau values (0.01-0.05) matter for strong retrievers (e.g. BGE) whose raw
+  # cosine distributions are flat; sharpening via low tau is what unlocks pruning.
+  tau_values: [0.01, 0.02, 0.05, 0.1, 0.5, 1.0, 2.0]
+  k_values: [3, 5, 10]
+
+datasets:
+  # natural_questions omitted: its clean HF variants are answer-only (no
+  # candidate pool for top-p to select among). See README > Benchmarks.
+  # Categorized by median gold docs/query (measured on real qrels):
+  # Peaked / single-evidence (top-p's token-saving regime):
+  - scifact
+  - fever
+  - triviaqa
+  # Mid / multi-evidence (a few golds):
+  - fiqa
+  - hotpotqa
+  - 2wikimultihopqa
+  - musique
+  - multihop_rag
+  # Flat / many-evidence (k fallback dominates):
+  - scidocs
+  - nfcorpus
+
+evaluation:
+  max_queries: 1000  # per dataset, null for all
+
+paths:
+  cache_dir: "data/cache"
+  output_dir: "outputs"
+  fixtures_dir: "data/fixtures"
